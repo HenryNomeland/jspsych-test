@@ -1,2 +1,2 @@
 # jspsych-test
-Testing JSPsych Experiments
+Testing jsPsych Experiments

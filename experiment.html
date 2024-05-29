@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>My experiment</title>
+    <script src="jspsych/jspsych.js"></script>
+    <script src="jspsych/plugin-html-keyboard-response.js"></script>
+    <link href="jspsych/jspsych.css" rel="stylesheet" type="text/css" />
+  </head>
+  <body></body>
+  <script>
+    const jsPsych = initJsPsych();
+    var timeline = [];
+    
+    var welcome = {
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: "Welcome to the experiment. Press any key to begin."
+    };
+    timeline.push(welcome);
+
+    var trial_1 = {
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: 'This is trial 1.'
+    }
+    timeline.push(trial_1);
+
+    var trial_2 = {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: 'This is trial 2.'
+    }
+    timeline.push(trial_2);
+
+    var trial_3 = {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: 'This is trial 3.'
+    }
+    timeline.push(trial_3);
+
+    jsPsych.run(timeline);
+  </script>
+</html>
