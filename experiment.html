@@ -4,37 +4,69 @@
     <title>My experiment</title>
     <script src="jspsych/jspsych.js"></script>
     <script src="jspsych/plugin-html-keyboard-response.js"></script>
+    <script src="jspsych/plugin-image-keyboard-response.js"></script>
+    <script src="jspsych/plugin-fullscreen.js"></script>
     <link href="jspsych/jspsych.css" rel="stylesheet" type="text/css" />
   </head>
   <body></body>
   <script>
-    const jsPsych = initJsPsych();
+    const jsPsych = initJsPsych({
+      show_progress_bar: true,
+      override_safe_mode: true
+    }); 
     var timeline = [];
     
     var welcome = {
       type: jsPsychHtmlKeyboardResponse,
-      stimulus: "Welcome to the experiment. Press any key to begin."
-    };
+      stimulus: "Welcome to the experiment. Press any key to begin. The remainder of the experiment will be fullscreen."
+    }
     timeline.push(welcome);
+
+    timeline.push({
+      type:jsPsychFullscreen,
+      fullscreen_mode: true
+    });
+
+    var image_trials = {
+      type: jsPsychImageKeyboardResponse,
+      prompt: '<p>Press a number 1-5 to indicate how blue the image is.</p>',
+      choices: ['1', '2', '3', '4', '5'],
+      timeline: [
+        {stimulus: 'static\\blueyellow.jpg'},
+        {stimulus: 'static\\bluepurple.jpg'},
+        {stimulus: 'static\\yelloworangeblue.jpg'}
+      ]
+    }
+    timeline.push(image_trials);
+
+    var key_trials = {
+      type: jsPsychHtmlKeyboardResponse,
+      timeline: [
+        {stimulus: 'This is trial 4, press any key.'},
+        {stimulus: 'This is trial 5, press any key.'},
+        {stimulus: 'This is trial 6, press any key.'}
+      ]
+    }
 
     var trial_1 = {
     type: jsPsychHtmlKeyboardResponse,
-    stimulus: 'This is trial 1.'
+    stimulus: 'This is trial 4, press any key.'
     }
-    timeline.push(trial_1);
+    timeline.push(trial_4);
 
     var trial_2 = {
         type: jsPsychHtmlKeyboardResponse,
-        stimulus: 'This is trial 2.'
+        stimulus: 'This is trial 5, press any key.'
     }
-    timeline.push(trial_2);
+    timeline.push(trial_5);
 
     var trial_3 = {
         type: jsPsychHtmlKeyboardResponse,
-        stimulus: 'This is trial 3.'
+        stimulus: 'This is trial 6, press any key.'
     }
-    timeline.push(trial_3);
+    timeline.push(trial_6);
 
+    jsPsych.data.get().localSave('json', 'experimentData.json');
     jsPsych.run(timeline);
   </script>
 </html>
