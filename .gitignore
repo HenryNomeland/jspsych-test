@@ -1,2 +1,5 @@
-\audio
-/audio
+*.csv
+*.jpg
+*.png
+*.svg
+*.pdf

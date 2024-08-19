@@ -6,67 +6,361 @@
     <script src="jspsych/plugin-html-keyboard-response.js"></script>
     <script src="jspsych/plugin-image-keyboard-response.js"></script>
     <script src="jspsych/plugin-fullscreen.js"></script>
-    <link href="jspsych/jspsych.css" rel="stylesheet" type="text/css" />
+    <script src="jspsych/plugin-instructions.js"></script>
+    <script src="jspsych/plugin-survey-multi-choice.js"></script>
+    <link href="jspsych/jspsych.css" rel="stylesheet" type="text/css"/>
   </head>
+
+  <!-- additional custom css built on top of the jsPsych css -->
+  <style>
+    .required{
+      display: none;
+    }
+    .audio-container {
+      display: flex;
+      align-items: center;
+      gap: 20px; /* Adjust the gap as needed */
+    }
+    .audio-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    audio::-webkit-media-controls-mute-button {
+        display: none !important;
+    }
+    audio::-webkit-media-controls-volume-slider {
+        display: none !important;
+    }
+  </style>
+
+  <!-- the body is entirely populated by the JS Code -->
   <body></body>
+
+  <!-- script where the jsPsych code is executed -->
   <script>
-    const jsPsych = initJsPsych({
-      show_progress_bar: true,
-      override_safe_mode: true
-    }); 
-    var timeline = [];
-    
-    var welcome = {
-      type: jsPsychHtmlKeyboardResponse,
-      stimulus: "Welcome to the experiment. Press any key to begin. The remainder of the experiment will be fullscreen."
-    }
-    timeline.push(welcome);
+    // Extra little thing for making sure only one audio can play at once and otherwise the other is reset/paused
+    document.addEventListener('play', function(e) {
+        var audios = document.getElementsByTagName('audio');
+        for (var i = 0, len = audios.length; i < len; i++) {
+            if (audios[i] != e.target) {
+                audios[i].pause();
+                audios[i].currentTime = 0;
+            }
+            audios[i].style.pointerEvents = 'none';
+            audios[i].style.opacity = '0.3';
+        }
+    }, true);
 
-    timeline.push({
-      type:jsPsychFullscreen,
-      fullscreen_mode: true
+    function enableAudioControls() {
+        var audios = document.getElementsByTagName('audio');
+        for (var i = 0, len = audios.length; i < len; i++) {
+            audios[i].style.pointerEvents = 'auto';
+            audios[i].style.opacity = '1';
+        }
+    }
+    document.addEventListener('ended', enableAudioControls, true);
+
+    // CONSTANTS FOR CHANGING
+    const PAIRS_FILE = "pilot_pairs.csv"
+    const AUDIO_FOLDER = "pilot_audio"
+    const RESULTS_FOLDER = "pilot_results_data"
+
+    // Helper function to shuffle a portion of an array
+    function shufflePortion(arr, start, end) {
+        for (let i = end - 1; i > start; i--) {
+            const j = Math.floor(Math.random() * (i - start + 1)) + start;
+            let temp = arr[i];
+            arr[i] = arr[j];
+            arr[j] = temp;
+        }
+    }
+
+    // Helper function to swap pair1 and pair2 randomly
+    function seededRandom(seed) {
+        var x = Math.sin(seed++) * 10000;
+        return x - Math.floor(x);
+    }
+    function swapPairsRandomly(arr, start, end, seed, reverse) {
+        for (let i = start; i < end; i++) {
+            // Generate a random number using the seeded random function
+            const randomValue = seededRandom(seed);
+            seed += 1; // Increment seed to get different random value for next iteration
+            let swap;
+            if (reverse) {
+              swap = randomValue >= 0.5;
+            } else {
+              swap = randomValue < 0.5;
+            }
+            if (swap) {
+                let temp = arr[i].pair1;
+                arr[i].pair1 = arr[i].pair2;
+                arr[i].pair2 = temp;
+            }
+        }
+    }
+
+    // Helper function to swap pair1 and pair2 non-randomly
+    function swapPairs(arr, start, end) {
+        for (let i = start; i < end; i++) {
+            let temp = arr[i].pair1;
+            arr[i].pair1 = arr[i].pair2;
+            arr[i].pair2 = temp;
+        }
+    }
+
+    function shuffleAndSwapPairs(pairsData) {
+        const length = pairsData.length;
+        const mid = Math.floor(length / 2);
+        // Shuffle the first half
+        shufflePortion(pairsData, 0, mid);
+        // Shuffle the second half
+        shufflePortion(pairsData, mid, length);
+        // Swap pair1 and pair2 randomly in the first half
+        const seed = Math.round(Math.random() * 10000);
+        swapPairsRandomly(pairsData, 0, mid, seed, false);
+        // Swap pair1 and pair2 randomly in the second half but in the opposite way
+        swapPairsRandomly(pairsData, mid, length, seed, true);
+        // Map sequential set numbers to the now-shuffled data
+        for (let i = 0; i < pairsData.length; i++) {
+            pairsData[i].set_num = i + 1;
+        }
+        // Remove the last 10 elements so that we don't do as much reliability testing
+        pairsData.splice(pairsData.length - 10, pairsData.length); 
+        return pairsData;
+    }
+
+    let pairsData = [];
+    const response = fetch(PAIRS_FILE)
+      .then((response) => response.text())
+      .then((text) => {
+        const pairsText = text;
+        const rows = pairsText.trim().split('\r');
+        for (let i = 1; i < rows.length; i++) {
+          const cols = rows[i].split(',');
+          const pair1 = cols[0].trim();
+          const pair2 = cols[1].trim();
+          const id = cols[2].trim();
+          pairsData.push({pair1, pair2, id});
+        };
+        pairsData = shuffleAndSwapPairs(pairsData);
+        console.log(pairsData);
+      });
+
+    // function used for saving the data to the data folder
+    function saveData(name, data){
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', 'write_data.php');
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.send(JSON.stringify({filedata: data}));
+    }
+
+    // this response then is needed to access the pairsData array created by reading the csv
+    response.then(() => {
+      // Creates the jsPsych App
+      const jsPsych = initJsPsych({
+        show_progress_bar: true,
+        override_safe_mode: true,
+        auto_update_progress_bar: false,
+        // .filterColumns(["rt", "pair_id", "response"])
+        on_finish: function(){
+          jsPsych.data.get().filter({trial_type: 'survey-multi-choice'}).filterColumns(["rt", "pair_id", "response", "experiment_num", "childA", "childB"]).localSave('csv', "experiment.csv");
+        }
+      }); 
+      var timeline = [];
+      var n_trials = pairsData.length;
+      var stimuli_array = pairsData;
+
+      timeline.push({
+        message: "<p>Welcome to the experiment. The remainder of the experiment will be fullscreen.</p><br>",
+        type: jsPsychFullscreen,
+        fullscreen_mode: true
+      });
+
+      // this is the timeline describing instructions given at the beginning of the experiment
+      timeline.push({
+        type: jsPsychInstructions,
+        pages:[
+          '<p>During this experiment, you will listen to sets of children saying three sentences. Every set will include two different children.</p><br>',
+          '<p>After listening to each pair of children, you will be asked whether you thought one child sounded more understandable than another.</p><br>',
+          '<p>If you indicate that you thought one child sounded more understandable than another, you will perform two follow-ups.</p> \
+          <ol> \
+            <li style="text-align:left">Selecting which child was more understandable to you.</li> \
+            <li style="text-align:left">Rating how much more understandable the child you chose was compared to the other child.</li> \
+          </ol>',
+          '<p>You will be able to listen to the children\'s samples as many times as you would like.<br><br>\
+          <strong>Remember, we want to know how these children\'s speech samples compare in understandability to <i>YOU</i>.</strong></p><br>'
+        ],
+        show_clickable_nav: true
+      });
+
+      // this is the template for the conditional page asking follow-up questions
+      // this timeline is nested into the yes_no_prompt timeline which itself is nested into the main_questioning timeline
+      var follow_up_prompt = {
+        type: jsPsychSurveyMultiChoice,
+        timeline: [
+          {questions: [
+          {
+          prompt: function() {
+            var html = [`<p><h2>Set ${jsPsych.timelineVariable('set_num')}/${n_trials}</h2>
+                        <br>
+                        <strong>You will now answer two follow-up questions.</strong>
+                        <br><br>
+                        <strong>You may listen to the recordings again before answering.</strong>
+                        <br><br>
+                        <p>The children are saying the following sentences:</p> 
+                        <ol> \
+                          <li style="text-align:left">They'll eat those hotdogs soon.</li> 
+                          <li style="text-align:left">His fingers are in wrong.</li> 
+                          <li style="text-align:left">This cheese doesn't smell good.</li> 
+                        </ol>
+                        <br>
+                        <div class="audio-container">
+                          <div class="audio-item">
+                            <label><strong>Child A:</strong></label>
+                            <audio id="audio2" controls controlslist="nodownload noplaybackrate">
+                              <source src="${AUDIO_FOLDER}/${jsPsych.timelineVariable('pair1')}.wav">
+                            </audio>
+                          </div>
+                          <div class="audio-item">
+                            <label><strong>Child B:</strong></label>
+                            <audio id="audio2" controls controlslist="nodownload noplaybackrate">
+                              <source src="${AUDIO_FOLDER}/${jsPsych.timelineVariable('pair2')}.wav">
+                            </audio>
+                          </div>
+                        </div>
+                        <br><br>
+                        Which child is more understandable?<br>`];
+              return html;
+            },
+            name: 'childResponse',
+            required: true,
+            options: ['Child A', 'Child B'],
+            preamble: ""
+          },
+          {
+            prompt: function() {var html = [
+              'How much more understandable?<br>'];
+              return html;
+            },
+            name: 'amountResponse',
+            required: true,
+            options: ['Very small amount', 'Small amount', 'Moderate amount', 'Large amount', 'Very large amount'],
+            preamble: ""
+          }]}
+        ],
+        conditional_function: function(){
+          // get the data from the previous trial
+          // and check whether the answer was 'Yes'
+          var data = jsPsych.data.get().last(1).values()[0];
+          console.log(data.response.YesNoResponse)
+          if(data.response.YesNoResponse == "Yes"){
+            return true;
+          } else {
+            return false;  
+          }
+          return true
+        },
+        data: {pair_id: jsPsych.timelineVariable('id'),
+               childA: jsPsych.timelineVariable('pair1'),
+               childB: jsPsych.timelineVariable('pair2'),
+               experiment_num: jsPsych.timelineVariable('set_num')},
+        on_load: enableAudioControls()
+      }
+
+      // this is the template for the page asking whether one child is more understandable than the other
+      // the timeline and the variables makes this section 153 (or n_trials) steps long - it reads from stimuli_array
+      let setArray = [];
+      var yes_no_prompt = {
+        type: jsPsychSurveyMultiChoice,
+        timeline: [
+          {questions: [{
+            prompt: function() {
+              var html = [`<p><h2>Set ${jsPsych.timelineVariable('set_num')}/${n_trials}</h2>
+                          <br>
+                          Listen to the following two children.
+                          <br>
+                          Think carefully about their <strong>understandability</strong> while producing the sentences.
+                          <br><br>
+                          <p>The children are saying the following sentences:</p> 
+                          <ol> \
+                            <li style="text-align:left">They'll eat those hotdogs soon.</li> 
+                            <li style="text-align:left">His fingers are in wrong.</li> 
+                            <li style="text-align:left">This cheese doesn't smell good.</li> 
+                          </ol>
+                          <br>
+                          <div class="audio-container">
+                            <div class="audio-item">
+                              <label><strong>Child A:</strong></label>
+                              <audio id="audio2" controls controlslist="nodownload noplaybackrate">
+                                <source src="${AUDIO_FOLDER}/${jsPsych.timelineVariable('pair1')}.wav">
+                              </audio>
+                            </div>
+                            <div class="audio-item">
+                              <label><strong>Child B:</strong></label>
+                              <audio id="audio2" controls controlslist="nodownload noplaybackrate">
+                                <source src="${AUDIO_FOLDER}/${jsPsych.timelineVariable('pair2')}.wav">
+                              </audio>
+                            </div>
+                          </div>
+                          <br><br>
+                          Is one child more understandable than the other?<br>`];
+              return html;
+            },
+            name: 'YesNoResponse',
+            required: true,
+            options: ['Yes', 'No'],
+            preamble: ""
+          }]},
+          follow_up_prompt
+        ],
+        // this is the area which updates the progress bar manually
+        // if the automatic functionality is used wonky stuff happens like chunks being updated at once
+        on_finish: function() {
+          if (!(jsPsych.timelineVariable('set_num') in setArray)) {
+            var current_value = jsPsych.getProgressBarCompleted();
+            jsPsych.setProgressBar(current_value + (1/n_trials));
+            setArray.push(jsPsych.timelineVariable('set_num'));
+          }
+        },
+        data: {pair_id: jsPsych.timelineVariable('id'),
+               childA: jsPsych.timelineVariable('pair1'),
+               childB: jsPsych.timelineVariable('pair2'),
+               experiment_num: jsPsych.timelineVariable('set_num')},
+        on_load: enableAudioControls()
+      };
+
+      // this is the main timeline which nests the other timelines - allowing for lots of similar tasks in a row
+      var main_questioning = {
+        timeline: [
+          yes_no_prompt
+        ],
+        // this timeline_variables thing is the important part
+        // as it tells yes_no_prompt which audio files to go through
+        timeline_variables: stimuli_array
+      }
+      timeline.push(main_questioning);
+
+      timeline.push({
+        type: jsPsychFullscreen,
+        fullscreen_mode: false
+      });
+
+      timeline.push({
+        type: jsPsychInstructions,
+        pages:[
+          '<p>Congrats! You have finished the experiment.</p><br><p>Please click next to save your results. You can then exit the experiment.</p><br>',
+        ],
+        show_clickable_nav: true,
+        on_finish: function(data){
+          if(jsPsych.pluginAPI.compareKeys(data.response, "n")){
+            jsPsych.endExperiment('Congrats! You may now exit.');
+          }
+        }
+      });
+
+      // this runs the main timeline
+      jsPsych.run(timeline);
     });
-
-    var image_trials = {
-      type: jsPsychImageKeyboardResponse,
-      prompt: '<p>Press a number 1-5 to indicate how blue the image is.</p>',
-      choices: ['1', '2', '3', '4', '5'],
-      timeline: [
-        {stimulus: 'static\\blueyellow.jpg'},
-        {stimulus: 'static\\bluepurple.jpg'},
-        {stimulus: 'static\\yelloworangeblue.jpg'}
-      ]
-    }
-    timeline.push(image_trials);
-
-    var key_trials = {
-      type: jsPsychHtmlKeyboardResponse,
-      timeline: [
-        {stimulus: 'This is trial 4, press any key.'},
-        {stimulus: 'This is trial 5, press any key.'},
-        {stimulus: 'This is trial 6, press any key.'}
-      ]
-    }
-
-    var trial_1 = {
-    type: jsPsychHtmlKeyboardResponse,
-    stimulus: 'This is trial 4, press any key.'
-    }
-    timeline.push(trial_4);
-
-    var trial_2 = {
-        type: jsPsychHtmlKeyboardResponse,
-        stimulus: 'This is trial 5, press any key.'
-    }
-    timeline.push(trial_5);
-
-    var trial_3 = {
-        type: jsPsychHtmlKeyboardResponse,
-        stimulus: 'This is trial 6, press any key.'
-    }
-    timeline.push(trial_6);
-
-    jsPsych.data.get().localSave('json', 'experimentData.json');
-    jsPsych.run(timeline);
   </script>
 </html>
